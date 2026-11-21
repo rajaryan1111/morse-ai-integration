@@ -2,6 +2,8 @@ import { channel } from "node:diagnostics_channel";
 import { createServer } from "node:http";
 
 const simulateRejection = process.argv.includes("--simulate-rejection");
+const simulateSuccess = process.argv.includes("--simulate-success");
+const simulateResponse = simulateRejection || simulateSuccess;
 const traceStatuses = [];
 const requestIdHeaders = ["x-request-id", "request-id", "trace-id", "cf-ray"];
 let mockServer;
@@ -45,14 +47,16 @@ channel("http.client.request.error").subscribe(({ request, error }) => {
   console.error(JSON.stringify(diagnostic));
 });
 
-if (!simulateRejection && !process.env.MORSE_API_KEY?.trim()) {
+if (!simulateResponse && !process.env.MORSE_API_KEY?.trim()) {
   throw new Error("MORSE_API_KEY is not set in this process; no key value was read or printed.");
 }
 
-if (simulateRejection) {
+if (simulateResponse) {
   mockServer = createServer((request, response) => {
     request.resume();
-    response.writeHead(401, { "x-request-id": "simulated-rejection" });
+    response.writeHead(simulateRejection ? 401 : 200, {
+      "x-request-id": simulateRejection ? "simulated-rejection" : "simulated-acceptance",
+    });
     response.end();
   });
   await new Promise((resolve) => mockServer.listen(0, "127.0.0.1", resolve));
@@ -69,7 +73,7 @@ if (simulateRejection) {
 
 // Subscribe before loading the SDK so the exporter request is observed.
 const morse = await import("@morsehq-dev/sdk");
-morse.init(simulateRejection
+morse.init(simulateResponse
   ? { apiKey: `mhq_local_error_test_${"0".repeat(64)}` }
   : undefined);
 

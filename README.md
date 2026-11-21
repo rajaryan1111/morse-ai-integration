@@ -1,80 +1,160 @@
-# Morse delivery verification
+# Morse AI SDK delivery evaluation
 
-This repository contains a small Node.js integration check for
-`@morsehq-dev/sdk@0.8.0`. It creates a named agent trace with a child tool span
-and a checked outcome, then records the HTTP result returned by Morse's OTLP
-ingest endpoint.
+A minimal Node.js integration check for `@morsehq-dev/sdk@0.8.0`. It records a
+deterministic agent run with a child tool span and a checked outcome, flushes
+the SDK, and verifies the HTTP status returned by Morse's OTLP trace endpoint.
+It uses no model provider or provider API key.
 
-## Findings
+## Prerequisites and installation
 
-- `connection-test.mjs` is an ESM module (`.mjs`), so its top-level `await` and
-  `import` work even though `package.json` does not set `type: "module"`.
-- The SDK README documents `init()`, `run({ agentName }, callback)`,
-  `spanAsync(...)`, `handle.setOutcome(...)` and `await flush()`.
-- In SDK 0.8.0, `run()`/`span()` traces go through OpenTelemetry OTLP. The SDK
-  prints the configured legacy batch URL (`/api/v1/traces/batch`) but derives
-  the actual OTLP URL as `/api/v1/otlp/v1/traces`. It sends
-  `Authorization: Bearer <key>` and gzipped protobuf. Do not send an OTLP
-  protobuf trace to the batch JSON endpoint.
-- `flush()` calls the OTel provider's `forceFlush()`. The SDK catches export
-  failures and returns `undefined`; it does not expose HTTP status or confirm
-  that Morse accepted the spans. A resolved `flush()` alone is not proof of
-  delivery.
-- The OTLP exporter retries retryable failures. Non-retryable responses fail
-  export. The public `flush()` absorbs the resulting error, so the test uses
-  Node's `http.client.response.finish` diagnostics channel to report status and
-  allowlisted request ID headers. It never inspects or logs the authorization
-  header, request body, or response body. SDK self-diagnostics may also report
-  sanitized internal failures.
-- A bare run can be classified as low-signal and hidden by the dashboard's
-  Traces filter. Morse's current quickstart says to click **Show them** when
-  low-signal traces are hidden. The test adds a child tool span and a real
-  checked outcome to make the trace more informative, but it does not create a
-  model call or cost.
-
-The original `connection-test.mjs` ran a nameless-duration no-op callback and
-printed “Morse flush completed” regardless of server outcome. That message was
-only local progress. The code and package files were inspected at SDK version
-0.8.0; see the official [installation](https://docs.morseai.dev/sdk/installation),
-[quickstart](https://docs.morseai.dev/start/quickstart),
-[overview](https://docs.morseai.dev/sdk/overview), and
-[self-diagnostics](https://docs.morseai.dev/sdk/self-diagnostics) docs.
-
-## Run
-
-Provide `MORSE_API_KEY` in the current shell using your normal secret manager or
-local environment setup. Do not paste it into a command, source file, or log.
+- Node.js 18.19+ or 20.6+ (verified here with Node 24.10.0)
+- npm
+- A Morse API key for the real integration run
 
 ```sh
 npm ci
-node connection-test.mjs
 ```
 
-The command exits successfully only after it observes a successful HTTP
-response for the OTLP trace export. It prints the HTTP status and, when
-available, request ID headers. It never prints payloads or credentials. Then
-open **Traces** in the Morse dashboard and search for
-`morse-delivery-verification`; if the dashboard reports hidden low-signal
-traces, click **Show them**.
+`npm ci` installs the pinned lockfile dependencies; no extra test framework or
+runtime dependency is required.
 
-To exercise the non-success path without using a real key or contacting Morse:
+## Configure credentials securely
+
+Set `MORSE_API_KEY` in the shell using your secret manager or enter it at a
+hidden prompt. Do not put the key in source, a command argument, or a log.
 
 ```sh
-node connection-test.mjs --simulate-rejection
+read -s "MORSE_API_KEY?Morse API key: "
+export MORSE_API_KEY
+printf '\n'
 ```
 
-This redirects the SDK to a local HTTP server that returns a synthetic 401. The
-expected result is a sanitized status/request-ID report and exit code 1. It
-does not validate a real credential, endpoint, server acceptance, or dashboard
-visibility.
+The SDK reads this variable during `morse.init()`. `.gitignore` excludes
+`.env` and `.env.*`; `.env.example` is only a blank `MORSE_API_KEY=` placeholder.
+The integration does not load or print `.env`.
 
-## Verification limits
+## Run the integration
 
-This checkout did not have `MORSE_API_KEY` in its process environment, and the
-working folder is a fresh clone of the public repository. No `.env` file was
-read or copied. Therefore the real authenticated request and dashboard lookup
-could not be run here. A 2xx response proves the server accepted the OTLP
-request at the HTTP layer; it does not independently prove how soon the trace
-appears in the dashboard. If the integration reports 2xx but the trace is
-missing after checking **Show them**, use the printed request ID with Morse
-support to distinguish ingest/indexing issues from a workspace/filter issue.
+```sh
+npm run verify
+```
+
+The script runs `morse.run({ agentName: "morse-delivery-verification" })`,
+records a local deterministic tool span, and reports a success outcome only
+when the check returns 42. It calls `await morse.flush()` and watches Node's
+HTTP response diagnostics channel. It prints only the trace endpoint path,
+HTTP status, allowlisted request ID headers, and sanitized network error
+categories. It never reads/logs request headers, request payloads, or response
+bodies. It exits nonzero if the OTLP trace request has no observed 2xx response.
+Even with an HTTP 2xx response, dashboard visibility is a separate check.
+
+Remove the key from the current shell when finished:
+
+```sh
+unset MORSE_API_KEY
+```
+
+## Tests
+
+```sh
+npm test
+```
+
+The built-in Node test runner exercises two local HTTP cases without using a
+real key or contacting Morse:
+
+- Synthetic HTTP 200: expects exit code 0, an accepted status, and the synthetic
+  request ID.
+- Synthetic HTTP 401: expects exit code 1, a rejected status, and the synthetic
+  request ID.
+
+`node --check connection-test.mjs` checks script syntax. To run either test
+case directly, use `node connection-test.mjs --simulate-success` or
+`node connection-test.mjs --simulate-rejection`. The rejection command's
+nonzero exit is expected.
+
+## Architecture and findings
+
+- SDK docs support `init()`, `run({ agentName }, callback)`, `spanAsync(...)`,
+  `handle.setOutcome(...)`, and `await flush()`.
+- The SDK README and installed package confirm `run()` emits OpenTelemetry
+  spans over OTLP. The SDK's startup line prints a batch URL ending in
+  `/api/v1/traces/batch`, but it derives the OTLP trace request URL as
+  `/api/v1/otlp/v1/traces`. The batch URL is not the actual trace request for
+  `run()`.
+- The OTLP request uses `Authorization: Bearer <key>` and protobuf with gzip
+  compression. The credentials are supplied by the SDK; this integration does
+  not construct or expose the auth header.
+- In SDK 0.8.0, `flush()` awaits the OpenTelemetry provider's force flush, but
+  export failures are absorbed and the function returns no acceptance result.
+  A local “flush completed” message cannot establish server acceptance.
+- The SDK retries retryable failures. Its normal error reporting is deliberately
+  best effort; the response observer gives this short script explicit status
+  evidence and exits unsuccessfully on missing or rejected trace responses.
+- A bare run with no child span or outcome is less informative and may be
+  marked low-signal. Morse's current dashboard says low-signal rows are shown
+  while the workspace is getting set up, then can be hidden after enough AI
+  runs. This evaluation includes a child tool span and outcome.
+
+The dashboard also contained the earlier `connection-test` run: one entry was
+513 ms at 5:40 PM, matching the original script's 500 ms delay, and two older
+6 ms entries were labeled low-signal. This confirms the baseline was reaching
+the selected workspace. The reported “not visible” symptom was therefore not
+reproduced as an ingest failure; a different workspace, time range, filter, or
+hidden low-signal view can explain the display discrepancy, but the original
+browser state was not captured, so its exact UI cause cannot be proven.
+
+Official references: [Installation](https://docs.morseai.dev/sdk/installation),
+[Quickstart](https://docs.morseai.dev/start/quickstart),
+[SDK overview](https://docs.morseai.dev/sdk/overview), and
+[Self-diagnostics](https://docs.morseai.dev/sdk/self-diagnostics).
+
+## Verification record
+
+The authenticated run reported by the operator returned **HTTP 200** from
+`/api/v1/otlp/v1/traces` with request ID
+`0acffce3-18ff-47ff-923a-d926d0ea9292`. HTTP 200 establishes HTTP-level
+acceptance. In the authenticated Morse **Default Workspace**, the Traces view
+and detail panel showed:
+
+- Agent: `morse-delivery-verification`
+- Trace ID: `832e2207-f14b-000d-ada8-de885af9881f`
+- Outcome: `deterministic_check_passed` (Succeeded, reported by SDK run)
+- Spans: 2 total, including `verify-deterministic-operation` (`tool`)
+- Revision displayed by Morse: `65b160d`
+
+Thus dashboard visibility is confirmed for the authenticated run. The Traces
+page showed low-signal traces while the workspace was getting set up. Older
+`connection-test` entries were also present; at least two were explicitly
+marked low-signal. If a future trace is absent, verify the selected workspace,
+time range, filters, and the **Show them** control for hidden low-signal runs.
+
+The real authenticated result above is recorded from the operator-provided test
+result and the live dashboard inspection. This checkout's process did not have
+`MORSE_API_KEY`, so the authenticated request was not repeated during the final
+local audit. No `.env` file was read or copied.
+
+## Troubleshooting and limits
+
+- **Missing key:** export `MORSE_API_KEY` in the same shell that runs `npm run
+  verify`; the script stops before initializing the SDK if it is absent.
+- **HTTP 401/403:** verify that the key is active and belongs to the intended
+  Morse environment. The script reports status and request ID only.
+- **No HTTP response / network failure:** check outbound HTTPS access and any
+  configured `MORSE_ENDPOINT`; only sanitized failure category and error code
+  are reported.
+- **2xx but no visible row:** confirm workspace and time range, clear filters,
+  and reveal hidden low-signal traces. Use the request ID with Morse support if
+  the trace still does not appear.
+- HTTP 2xx confirms acceptance at the HTTP layer; it does not promise indexing
+  latency or explain downstream dashboard filtering.
+
+## Security review
+
+- No credential or request/response body is printed by the integration.
+- `.env` and `.env.*` are ignored; the blank `.env.example` is intentionally
+  tracked.
+- Tests use only a synthetic local key and loopback HTTP server.
+- The commit contains only `README.md`, `connection-test.mjs`, and
+  `connection-test.test.mjs` plus the package script update in `package.json`;
+  no secret files or generated dependencies are part of the branch.
