@@ -24,6 +24,7 @@ Set `MORSE_API_KEY` in the shell using your secret manager or enter it at a
 hidden prompt. Do not put the key in source, a command argument, or a log.
 
 ```sh
+# zsh
 read -s "MORSE_API_KEY?Morse API key: "
 export MORSE_API_KEY
 printf '\n'
@@ -41,12 +42,18 @@ npm run verify
 
 The script runs `morse.run({ agentName: "morse-delivery-verification" })`,
 records a local deterministic tool span, and reports a success outcome only
-when the check returns 42. It calls `await morse.flush()` and watches Node's
-HTTP response diagnostics channel. It prints only the trace endpoint path,
-HTTP status, allowlisted request ID headers, and sanitized network error
-categories. It never reads/logs request headers, request payloads, or response
-bodies. It exits nonzero if the OTLP trace request has no observed 2xx response.
-Even with an HTTP 2xx response, dashboard visibility is a separate check.
+when the check returns 42. It calls `await morse.flush()` and
+`await morse.shutdown()`, then uses Node's `http.client.response.finish` and
+`http.client.request.error` diagnostics channels to inspect the exact OTLP
+endpoint response. Those built-in HTTP channels are experimental in Node 24.
+
+The script prints only the fixed OTLP path, HTTP status, validated request ID
+headers, or a sanitized network failure category/code. It suppresses SDK console
+output during initialization and export so an endpoint query string or an SDK
+error body cannot appear in this script's output. It never reads/logs request
+headers or request/response bodies. A run succeeds only if the final attempt
+for its one trace export returned 2xx. Even with an HTTP 2xx response, dashboard
+visibility is a separate check.
 
 Remove the key from the current shell when finished:
 
@@ -60,18 +67,29 @@ unset MORSE_API_KEY
 npm test
 ```
 
-The built-in Node test runner exercises two local HTTP cases without using a
-real key or contacting Morse:
+The built-in Node test runner exercises local HTTP cases without a real key or
+contacting Morse:
 
-- Synthetic HTTP 200: expects exit code 0, an accepted status, and the synthetic
-  request ID.
-- Synthetic HTTP 401: expects exit code 1, a rejected status, and the synthetic
-  request ID.
+- HTTP 200 and 202 acceptance.
+- HTTP 400, 401, and 403 rejection with nonzero exit.
+- HTTP 503 followed by 200 to verify retry behavior and final request ID.
+- A successful export followed by a failed export to ensure an earlier 200
+  cannot mask the later rejection.
+- An unrelated HTTP 200 followed by OTLP 401 to ensure another path cannot
+  cause false success.
+- Loopback connection refusal and an OTLP request timeout, both with nonzero
+  exit and sanitized error output.
+- Output checks for a synthetic API key, auth header, request-context marker,
+  response-body marker, and endpoint query marker.
 
-`node --check connection-test.mjs` checks script syntax. To run either test
-case directly, use `node connection-test.mjs --simulate-success` or
-`node connection-test.mjs --simulate-rejection`. The rejection command's
-nonzero exit is expected.
+`node --check connection-test.mjs` and `node --check connection-test.test.mjs`
+check script syntax. Direct loopback scenarios include
+`node connection-test.mjs --simulate-success`,
+`node connection-test.mjs --simulate-status=403`,
+`node connection-test.mjs --simulate-retry`,
+`node connection-test.mjs --simulate-connection-refused`, and
+`node connection-test.mjs --simulate-timeout`. Failure scenarios exit nonzero
+as expected. The synthetic modes never use the real Morse key or contact Morse.
 
 ## Architecture and findings
 
@@ -88,9 +106,12 @@ nonzero exit is expected.
 - In SDK 0.8.0, `flush()` awaits the OpenTelemetry provider's force flush, but
   export failures are absorbed and the function returns no acceptance result.
   A local “flush completed” message cannot establish server acceptance.
-- The SDK retries retryable failures. Its normal error reporting is deliberately
-  best effort; the response observer gives this short script explicit status
-  evidence and exits unsuccessfully on missing or rejected trace responses.
+- The installed OTLP exporter retries retryable failures with backoff within
+  its bounded timeout. The observer records every attempt, and the test covers
+  a 503 followed by 200. Non-retryable responses fail immediately.
+- SDK `flush()` still absorbs export errors. This script's own safe observer
+  determines delivery status from the final response event, and exits
+  unsuccessfully on missing or rejected trace responses.
 - A bare run with no child span or outcome is less informative and may be
   marked low-signal. Morse's current dashboard says low-signal rows are shown
   while the workspace is getting set up, then can be hidden after enough AI
@@ -129,10 +150,11 @@ page showed low-signal traces while the workspace was getting set up. Older
 marked low-signal. If a future trace is absent, verify the selected workspace,
 time range, filters, and the **Show them** control for hidden low-signal runs.
 
-The real authenticated result above is recorded from the operator-provided test
-result and the live dashboard inspection. This checkout's process did not have
-`MORSE_API_KEY`, so the authenticated request was not repeated during the final
-local audit. No `.env` file was read or copied.
+The HTTP 200 and request ID above were supplied by the operator; the dashboard
+trace details were inspected in the authenticated browser session. This
+checkout's process did not have `MORSE_API_KEY`, so the authenticated request
+was not repeated during this audit. Synthetic HTTP results below are local test
+evidence only. No `.env` file was read or copied.
 
 ## Troubleshooting and limits
 
@@ -141,8 +163,8 @@ local audit. No `.env` file was read or copied.
 - **HTTP 401/403:** verify that the key is active and belongs to the intended
   Morse environment. The script reports status and request ID only.
 - **No HTTP response / network failure:** check outbound HTTPS access and any
-  configured `MORSE_ENDPOINT`; only sanitized failure category and error code
-  are reported.
+  configured `MORSE_ENDPOINT`; the script reports only a sanitized category and
+  safe system error code. Endpoint query strings are not printed.
 - **2xx but no visible row:** confirm workspace and time range, clear filters,
   and reveal hidden low-signal traces. Use the request ID with Morse support if
   the trace still does not appear.
