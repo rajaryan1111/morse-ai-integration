@@ -37,10 +37,12 @@ channel("http.client.request.error").subscribe(({ request, error }) => {
   const code = typeof error?.code === "string" && /^[A-Z0-9_]+$/.test(error.code)
     ? error.code
     : undefined;
+  const isTimeout = error?.name === "AbortError" ||
+    code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT";
   const diagnostic = {
     event: "morse_http_error",
     path,
-    error: error?.name === "AbortError" ? "request_timeout" : "request_failed",
+    error: isTimeout ? "request_timeout" : "request_failed",
     ...(code ? { code } : {}),
   };
   traceStatuses.push(diagnostic);
