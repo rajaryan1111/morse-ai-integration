@@ -120,9 +120,9 @@ presented as evidence of a fresh run from commit `1452987`.
   from output.
 - This change adds no dependency. `npm audit` found no reported vulnerabilities
   in the installed dependency tree.
-- The work commit changes only `README.md`, `connection-test.mjs`,
-  `connection-test.test.mjs`, and `SUBMISSION_REPORT.md`; the preceding commit
-  also updates the package test script.
+- The feature branch diff against `main` contains only `README.md`,
+  `SUBMISSION_REPORT.md`, `connection-test.mjs`, `connection-test.test.mjs`,
+  and `package.json`; the package change adds test and verify scripts.
 
 The current tracked tree was checked for environment files, and no `.env` file
 is tracked. No `.env` contents were read. The report does not claim a complete
