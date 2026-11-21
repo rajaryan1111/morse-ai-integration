@@ -13,15 +13,15 @@ requirements remain unknown and need human confirmation.
 
 | Requirement | Status | Evidence | Remaining action |
 |---|---|---|---|
-| Locate the original internship assignment | **Blocked** | Repository contains no assignment brief; connected mail search found Morse onboarding only | Provide the original assignment or evaluator rubric and map it against this report |
-| Preserve and use the designated repository branch | **Complete** | `codex/morse-delivery-verification`, clean after commit `1452987d92a8f02885d83b563626497cbdc397a4` | None |
-| Initialize and trace using official Morse SDK APIs | **Complete** | SDK 0.8.0 package and [Morse quickstart](https://docs.morseai.dev/start/quickstart); named `morse-delivery-verification` agent, tool span, deterministic outcome | None |
-| Prove remote acceptance rather than local queue completion | **Complete for code; live run blocked** | Script observes the exact OTLP response; synthetic responses exercise status handling; SDK `flush()` returns no acceptance result | Run once with an authorized API key to create current live evidence |
-| Handle HTTP rejection, retries, network error, timeout, and unrelated responses | **Complete** | `npm test`: 13 tests pass, including 200/202, 400/401/403, retry, later export rejection, unrelated response, refusal, timeout, and sanitization | None for the tested cases |
-| Verify dashboard visibility | **Complete for the recorded prior run; new run blocked** | Authenticated dashboard still shows the earlier trace in Default Workspace; details below | After a fresh live run, locate that new trace and record its ID |
-| Keep credentials and payloads out of logs and Git | **Complete for this change** | `.env` is ignored and untracked; `.env.example` contains only an empty placeholder; no auth headers or bodies are logged; tests scan output for synthetic secrets | Keep real keys outside source, shell history, and command arguments |
-| Reproducible documentation and submission package | **Complete for supplied scope** | README plus this report with commands, architecture, evidence, limitations, reviewer steps, and draft message | Confirm against original rubric when available |
-| Update the existing PR without merging | **Complete** | [PR #1](https://github.com/rajaryan1111/morse-ai-integration/pull/1) remains open and mergeable; no status checks reported | Evaluator/reviewer may review the PR; do not merge before review if that is required |
+| Locate the original internship assignment | **BLOCKED** | Repository contains no assignment brief; targeted connected-mail searches found Morse onboarding only | Provide the original assignment or evaluator rubric and map it against this report |
+| Preserve and use the designated repository branch | **VERIFIED** | Correct repository and `codex/morse-delivery-verification` branch confirmed; local and origin branch matched before this documentation-only evidence update | None |
+| Initialize and trace using official Morse SDK APIs | **VERIFIED** | SDK 0.8.0 package and [Morse quickstart](https://docs.morseai.dev/start/quickstart); named `morse-delivery-verification` agent, tool span, deterministic outcome | None |
+| Prove remote acceptance rather than local queue completion | **VERIFIED** | User-provided live HTTP 200 for the exact OTLP endpoint and request ID below; verifier observes HTTP response because SDK `flush()` returns no acceptance result | None for the supplied run; current shell has no key and did not repeat it |
+| Handle HTTP rejection, retries, network error, timeout, and unrelated responses | **VERIFIED** | `npm test`: 13 tests pass, including 200/202, 400/401/403, retry, later export rejection, unrelated response, refusal, timeout, and sanitization | None for the tested cases |
+| Verify dashboard visibility | **VERIFIED** | Authenticated dashboard showed the latest matching agent trace at 6:36 PM, revision `5674d7c`, with successful outcome and two spans; detail below | The UI does not expose the HTTP request ID, so its association with the operator-provided request is by date, time, agent, and revision |
+| Keep credentials and payloads out of logs and Git | **VERIFIED** | `.env` is ignored and untracked; `.env.example` contains only an empty placeholder; no auth headers or bodies are logged; tests scan output for synthetic secrets | Keep real keys outside source, shell history, and command arguments |
+| Reproducible documentation and submission package | **VERIFIED for the supplied scope** | README plus this report with commands, architecture, evidence, limitations, reviewer steps, and draft message | Confirm against original rubric when available |
+| Update the existing PR without merging | **VERIFIED** | [PR #1](https://github.com/rajaryan1111/morse-ai-integration/pull/1) is open and mergeable; no status checks reported | Evaluator/reviewer may review the PR; do not merge before review if that is required |
 
 ## Problem and objective
 
@@ -92,12 +92,34 @@ and exit status. The timeout case observes a request failure and no accepted
 response. A separate concurrent-export stress scenario is not part of this
 suite; this small integration emits one trace export per normal invocation.
 
-## Live delivery and dashboard evidence
+## Fresh live delivery and dashboard evidence
 
-The prior authenticated run (not executed by this audit) returned HTTP 200 from
-`/api/v1/otlp/v1/traces` with request ID
-`0acffce3-18ff-47ff-923a-d926d0ea9292`. The authenticated dashboard currently
-shows that historical trace in **Default Workspace**:
+The user supplied a fresh authenticated result from 21 November 2026: **HTTP
+200**, accepted, from `/api/v1/otlp/v1/traces`, with request ID
+`901b7255-7982-469f-8b19-2a7fd784ddf8`. I did not execute this request; it is
+operator-provided evidence.
+
+In the authorized dashboard session, the latest matching trace was visible in
+**Default Workspace** at 6:36 PM. Its details showed:
+
+- Agent: `morse-delivery-verification`
+- Trace ID: `ad6a299c-15bd-1173-755e-4e62f442fb53`
+- Outcome: `deterministic_check_passed` (Succeeded, reported by SDK run)
+- Spans: 2 total, including `verify-deterministic-operation` (`tool`)
+- Revision displayed by Morse: `5674d7c`, the branch head associated with the
+  supplied run before this documentation-only update
+
+This confirms that the fresh trace from code revision `5674d7c` is
+dashboard-visible with the expected child span and outcome. The dashboard UI
+does not display the HTTP request ID, so it cannot directly join the request
+ID to the trace. The association is supported by the same date, latest trace
+time, agent name, and revision in the operator's run context. The current shell
+has no `MORSE_API_KEY`, so I did not repeat the live request.
+
+## Earlier historical evidence
+
+An earlier authenticated run returned HTTP 200 from the same endpoint with
+request ID `0acffce3-18ff-47ff-923a-d926d0ea9292`. Its dashboard trace was:
 
 - Agent: `morse-delivery-verification`
 - Trace ID: `832e2207-f14b-000d-ada8-de885af9881f`
@@ -105,10 +127,7 @@ shows that historical trace in **Default Workspace**:
 - Spans: 2, including tool span `verify-deterministic-operation`
 - Revision shown by Morse: `65b160d`
 
-This confirms HTTP-level acceptance and dashboard visibility for that earlier
-run. The current shell has no `MORSE_API_KEY`, so no new authenticated request
-was made and no new trace was produced. The previous trace must not be
-presented as evidence of a fresh run from commit `1452987`.
+This evidence is retained separately and is not used as the fresh-run trace.
 
 ## Security review
 
@@ -133,9 +152,9 @@ for this task.
 
 - The original internship brief or evaluator rubric is unavailable, so
   assignment-specific completeness cannot be certified.
-- No new real authenticated integration run was possible in this checkout.
-- Historical dashboard visibility was reconfirmed, but visibility of a new
-  post-change trace remains unverified until the human runs the integration.
+- The current shell did not execute the supplied live run; its HTTP result is
+  operator-provided. The latest dashboard trace is visible and has the
+  expected current revision, but the UI does not show the request ID itself.
 - An HTTP 2xx confirms HTTP-level acceptance only. It does not guarantee
   indexing latency or dashboard display under every workspace/filter state.
 - The diagnostics channels used are experimental in Node 24.
@@ -155,8 +174,15 @@ for this task.
    low-signal traces if the UI offers that control. Open the trace and check
    the agent name, tool span, outcome, and span count.
 
+## GitHub delivery
+
+- Branch: `codex/morse-delivery-verification`
+- Pull request: [#1](https://github.com/rajaryan1111/morse-ai-integration/pull/1)
+- State at final remote review: open and mergeable; not merged
+- GitHub checks: no status checks were reported for the reviewed head commit
+
 ## Submission message draft
 
 > Hello Morse team,\
-> I’ve submitted the Morse AI SDK integration evaluation in [PR #1](https://github.com/rajaryan1111/morse-ai-integration/pull/1). The implementation includes a named agent trace, a deterministic tool span and outcome, HTTP-level OTLP delivery verification, sanitized diagnostics, synthetic failure tests, and setup documentation. The local test suite and npm audit pass. The prior authenticated run is visible in the Morse dashboard; I could not repeat a live run in this final checkout because its environment has no API key. The original assignment rubric was not present in the connected materials, so please share it if there are additional criteria I should address.\
+> I’ve submitted the Morse AI SDK integration evaluation in [PR #1](https://github.com/rajaryan1111/morse-ai-integration/pull/1). The integration includes a named trace, deterministic tool span and outcome, HTTP-level OTLP delivery verification, sanitized diagnostics, synthetic failure tests, and setup documentation. The local test suite and npm audit pass. A fresh authenticated HTTP 200 was reported, and the latest matching trace is visible in the dashboard with the expected outcome, tool span, and two spans. The original internship brief was not available in the connected materials; please share any remaining evaluator-specific criteria.\
 > Thank you.

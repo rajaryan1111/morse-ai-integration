@@ -144,16 +144,27 @@ and detail panel showed:
 - Spans: 2 total, including `verify-deterministic-operation` (`tool`)
 - Revision displayed by Morse: `65b160d`
 
-Thus dashboard visibility is confirmed for the authenticated run. The Traces
-page showed low-signal traces while the workspace was getting set up. Older
-`connection-test` entries were also present; at least two were explicitly
-marked low-signal. If a future trace is absent, verify the selected workspace,
-time range, filters, and the **Show them** control for hidden low-signal runs.
+The operator later supplied a fresh authenticated HTTP 200 from the same OTLP
+path with request ID `901b7255-7982-469f-8b19-2a7fd784ddf8` (21 November 2026).
+The latest matching trace in Default Workspace was visible at 6:36 PM, with
+agent `morse-delivery-verification`, trace ID
+`ad6a299c-15bd-1173-755e-4e62f442fb53`, outcome
+`deterministic_check_passed`, two spans including
+`verify-deterministic-operation`, and revision `5674d7c`. That revision matches
+the branch head associated with the run. The dashboard does not display the
+HTTP request ID, so the UI does not directly join that ID to the trace; the
+association is based on the run date/time, agent, and revision.
 
-The HTTP 200 and request ID above were supplied by the operator; the dashboard
+The Traces page showed low-signal traces while the workspace was getting set
+up. Older `connection-test` entries were also present; at least two were
+explicitly marked low-signal. If a trace is absent, verify the selected
+workspace, time range, filters, and the **Show them** control for hidden
+low-signal runs.
+
+The HTTP 200 results and request IDs were supplied by the operator; dashboard
 trace details were inspected in the authenticated browser session. This
 checkout's process did not have `MORSE_API_KEY`, so the authenticated request
-was not repeated during this audit. Synthetic HTTP results below are local test
+was not executed by this audit. Synthetic HTTP results below are local test
 evidence only. No `.env` file was read or copied.
 
 ## Troubleshooting and limits
@@ -177,6 +188,7 @@ evidence only. No `.env` file was read or copied.
 - `.env` and `.env.*` are ignored; the blank `.env.example` is intentionally
   tracked.
 - Tests use only a synthetic local key and loopback HTTP server.
-- The commit contains only `README.md`, `connection-test.mjs`, and
-  `connection-test.test.mjs` plus the package script update in `package.json`;
-  no secret files or generated dependencies are part of the branch.
+- The feature branch diff against `main` contains only `README.md`,
+  `SUBMISSION_REPORT.md`, `connection-test.mjs`, `connection-test.test.mjs`,
+  and the test/verify script update in `package.json`; no secret files or
+  generated dependencies are part of the branch.
